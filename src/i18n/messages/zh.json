@@ -1,0 +1,43 @@
+{
+  "title": "图片缩放与格式转换",
+  "upload": "上传图片",
+  "reset": "重新开始",
+  "panel": {
+    "title": "转换参数"
+  },
+  "width": "宽",
+  "height": "高",
+  "keepAspect": "保持长宽比",
+  "format": {
+    "label": "输出格式",
+    "webpRecommended": "WebP（推荐）"
+  },
+  "quality": {
+    "label": "画质（0.3–0.95）",
+    "current": "当前：{q}"
+  },
+  "maxSize": {
+    "label": "最大文件大小（KB）",
+    "hint": "若导出超过此大小，将自动降低画质（PNG 除外）。"
+  },
+  "start": "开始转换",
+  "reselect": "重新选择图片",
+  "preview": "预览",
+  "drop": {
+    "hint": "拖拽图片到页面任意位置",
+    "note": "所有处理在浏览器本地完成，不会上传到服务器。"
+  },
+  "or": "或",
+  "choose": "选择文件",
+  "originalSize": "原图大小",
+  "outputSize": "输出大小",
+  "download": "下载转换后的图片",
+  "cannotPreview": "该格式浏览器可能无法预览，请直接下载查看。",
+  "slider": {"aria": "对比滑块"}
+  ,
+  "size": {
+    "label": "目标尺寸（px）",
+    "inline": "原始尺寸：{iw}×{ih} → 输出：{ow}×{oh}"
+  }
+}
+

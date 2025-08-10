@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import NextImage from "next/image";
+import { useTranslations } from "next-intl";
 
 export interface BeforeAfterProps {
   original: string;
@@ -13,6 +14,7 @@ export interface BeforeAfterProps {
 export default function BeforeAfter({ original, converted, sliderPct, onSliderChange }: BeforeAfterProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState(false);
+  const t = useTranslations();
 
   const getClientX = useCallback((e: React.MouseEvent | MouseEvent | TouchEvent): number => {
     if (e instanceof TouchEvent) return e.touches[0].clientX;
@@ -85,7 +87,7 @@ export default function BeforeAfter({ original, converted, sliderPct, onSliderCh
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={sliderPct}
-        aria-label="对比滑块"
+        aria-label={t("slider.aria")}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === "ArrowLeft") onSliderChange(Math.max(0, sliderPct - 2));

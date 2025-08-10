@@ -1,0 +1,43 @@
+{
+  "title": "Image Resizer & Converter",
+  "upload": "Upload Image",
+  "reset": "Reset",
+  "panel": {
+    "title": "Conversion Parameters"
+  },
+  "width": "Width",
+  "height": "Height",
+  "keepAspect": "Keep aspect ratio",
+  "format": {
+    "label": "Output format",
+    "webpRecommended": "WebP (recommended)"
+  },
+  "quality": {
+    "label": "Quality (0.3–0.95)",
+    "current": "Current: {q}"
+  },
+  "maxSize": {
+    "label": "Max file size (KB)",
+    "hint": "If the export exceeds this size, the quality will be reduced automatically (except PNG)."
+  },
+  "start": "Convert",
+  "reselect": "Re-select",
+  "preview": "Preview",
+  "drop": {
+    "hint": "Drop image anywhere on the page",
+    "note": "All processing is done locally in your browser."
+  },
+  "or": "or",
+  "choose": "Choose file",
+  "originalSize": "Original size",
+  "outputSize": "Output size",
+  "download": "Download converted image",
+  "cannotPreview": "This format may not be previewable in the browser. Please download and open it.",
+  "slider": {"aria": "Comparison slider"}
+  ,
+  "size": {
+    "label": "Target size (px)",
+    "inline": "Original size: {iw}×{ih} → Output: {ow}×{oh}"
+  }
+}
+

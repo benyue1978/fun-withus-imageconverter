@@ -8,6 +8,8 @@ import { type OutputFormat } from "@/lib/codec/encoders";
 import { decodeToImageData } from "@/lib/codec/decoders";
 import { useConverter } from "@/lib/hooks/useConverter";
 import { computeResolvedSize } from "@/lib/utils/size";
+import { useTranslations } from "next-intl";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export default function Page() {
   // ====== State ======
@@ -24,6 +26,7 @@ export default function Page() {
 
   const { processing, error, outBlob, outURL, convert, clearOutput } = useConverter();
   const [loadError, setLoadError] = useState<string | null>(null);
+  const t = useTranslations();
 
   const [sliderPct, setSliderPct] = useState(50);
 
@@ -130,10 +133,11 @@ export default function Page() {
     <main className="min-h-screen w-full bg-gradient-to-b from-gray-50 to-white text-gray-900">
       {/* Header */}
       <header className="mx-auto max-w-6xl px-4 py-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">🖼️ Image Resizer & Converter</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">🖼️ {t("title")}</h1>
         <div className="flex items-center gap-3">
-          <button onClick={pickFile} className="px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800 active:scale-[.99]">上传图片</button>
-          <button onClick={resetAll} className="px-3 py-2 rounded-xl border hover:bg-gray-100">重新开始</button>
+          <button onClick={pickFile} className="px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800 active:scale-[.99]">{t("upload")}</button>
+          <button onClick={resetAll} className="px-3 py-2 rounded-xl border hover:bg-gray-100">{t("reset")}</button>
+          <LanguageSwitcher />
         </div>
       </header>
 
@@ -173,15 +177,15 @@ export default function Page() {
             {/* Preview */}
             <section className="lg:col-span-8">
               <div className="rounded-2xl border bg-white p-3 shadow-sm">
-                <h2 className="text-lg font-medium mb-3">预览</h2>
+                <h2 className="text-lg font-medium mb-3">{t("preview")}</h2>
                 {!outURL ? (
                   <div className="aspect-video w-full grid place-items-center text-sm text-gray-500 border border-dashed rounded-xl">
-                    {srcURL ? "点击开始转换以查看效果" : "请上传图片"}
+                  {srcURL ? "" : t("upload")}
                   </div>
                 ) : (
                   (format === "image/qoi") ? (
                     <div className="aspect-video w-full grid place-items-center text-sm text-gray-600 border rounded-xl">
-                      该格式浏览器可能无法预览，请直接下载查看（{downloadName(file, format)}）
+                      {t("cannotPreview")}
                     </div>
                   ) : (
                     <BeforeAfter
@@ -196,14 +200,14 @@ export default function Page() {
                 {outBlob && (
                   <div className="mt-4 flex items-center justify-between">
                     <div className="text-xs text-gray-600 space-x-3">
-                      {file && <span>原图大小：{(file.size / 1024).toFixed(1)} KB</span>}
-                      <span>输出大小：{(outBlob.size / 1024).toFixed(1)} KB</span>
+                      {file && <span>{t("originalSize")}：{(file.size / 1024).toFixed(1)} KB</span>}
+                      <span>{t("outputSize")}：{(outBlob.size / 1024).toFixed(1)} KB</span>
                     </div>
                     <a
                       href={outURL!}
                       download={downloadName(file, format)}
                       className="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
-                    >下载转换后的图片</a>
+                    >{t("download")}</a>
                   </div>
                 )}
               </div>
