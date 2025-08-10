@@ -1,11 +1,25 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 
 /**
  * Drop this in app/page.tsx of a Next.js (App Router) project with Tailwind.
  * It resizes & converts an image client‑side and shows an interactive before/after slider.
  */
+type OutputFormat =
+  | "image/png"
+  | "image/jpeg"
+  | "image/webp"
+  | "image/avif"
+  | "image/qoi";
+type JsquashModule = {
+  encode: (
+    img: ImageData,
+    opts?: Record<string, unknown>
+  ) => Promise<Uint8Array | ArrayBuffer>;
+};
+
 export default function Page() {
   // ====== State ======
   const [file, setFile] = useState<File | null>(null);
@@ -16,7 +30,7 @@ export default function Page() {
   const [targetH, setTargetH] = useState<number | "auto">("auto");
   const [keepAspect, setKeepAspect] = useState(true);
   const [maxKB, setMaxKB] = useState<number>(1024); // default 1MB
-  const [format, setFormat] = useState<"image/png" | "image/jpeg" | "image/webp" | "image/avif">("image/webp");
+  const [format, setFormat] = useState<OutputFormat>("image/webp");
   const [quality, setQuality] = useState<number>(0.85);
 
   const [processing, setProcessing] = useState(false);
@@ -27,13 +41,7 @@ export default function Page() {
 
   const [sliderPct, setSliderPct] = useState(50);
 
-  // ====== Capability detection ======
-  const supportsAVIF = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    const c = document.createElement("canvas");
-    // @ts-ignore - some browsers support avif
-    return c.toDataURL && c.toDataURL("image/avif").startsWith("data:image/avif");
-  }, []);
+  // 不再依赖浏览器能力检测；统一走 WASM 编码
 
   // Cleanup object URLs
   useEffect(() => {
@@ -60,8 +68,9 @@ export default function Page() {
         // Default output dimension = original
         setTargetW(bitmap.width);
         setTargetH(bitmap.height);
-      } catch (e: any) {
-        setError("无法读取图片：" + (e?.message || "未知错误"));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError("无法读取图片：" + (msg || "未知错误"));
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,7 +84,7 @@ export default function Page() {
     function onDrop(e: DragEvent) {
       e.preventDefault();
       const f = e.dataTransfer?.files?.[0];
-      if (f && f.type.startsWith("image/")) {
+      if (f && (f.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|avif|bmp|svg|ico)$/i.test(f.name))) {
         setFile(f);
       }
     }
@@ -114,12 +123,31 @@ export default function Page() {
   function pickFile() {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,.jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.svg,.ico";
     input.onchange = () => {
       const f = (input.files && input.files[0]) || null;
       if (f) setFile(f);
     };
     input.click();
+  }
+
+  // Maintain-aspect helpers for linked inputs
+  function setWidthKeepingAspect(value: number | "auto") {
+    setTargetW(value);
+    if (keepAspect && imgBitmap && typeof value === "number") {
+      const aspect = imgBitmap.width / imgBitmap.height;
+      const newH = Math.max(1, Math.round(value / aspect));
+      setTargetH(newH);
+    }
+  }
+
+  function setHeightKeepingAspect(value: number | "auto") {
+    setTargetH(value);
+    if (keepAspect && imgBitmap && typeof value === "number") {
+      const aspect = imgBitmap.width / imgBitmap.height;
+      const newW = Math.max(1, Math.round(value * aspect));
+      setTargetW(newW);
+    }
   }
 
   // Compute target size maintaining aspect
@@ -167,33 +195,73 @@ export default function Page() {
 
     try {
       const { w, h } = resolvedTarget;
-      // Use OffscreenCanvas when available for better perf
+      // Draw to 2D to get ImageData for WASM encoders
       const canvas: HTMLCanvasElement | OffscreenCanvas =
         "OffscreenCanvas" in window ? new OffscreenCanvas(w, h) : Object.assign(document.createElement("canvas"), { width: w, height: h });
       if (!(canvas instanceof OffscreenCanvas)) {
         canvas.width = w; (canvas as HTMLCanvasElement).height = h;
       }
-      const ctx = (canvas as any).getContext("2d", { alpha: true });
+      const ctx =
+        canvas instanceof OffscreenCanvas
+          ? canvas.getContext("2d", { alpha: true })
+          : (canvas as HTMLCanvasElement).getContext("2d", { alpha: true });
       if (!ctx) throw new Error("无法创建绘图上下文");
       ctx.clearRect(0, 0, w, h);
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      (ctx as unknown as { imageSmoothingQuality?: string }).imageSmoothingQuality = "high";
       ctx.drawImage(imgBitmap, 0, 0, w, h);
+      const imageData: ImageData = ctx.getImageData(0, 0, w, h);
 
-      // Export with optional binary search on quality for size cap
+      // Export with optional binary search on quality for size cap using WASM encoders
       const maxBytes = Math.max(1, Math.round(maxKB * 1024));
 
+      function bytesToBlob(bytes: Uint8Array | ArrayBuffer, mime: string): Blob {
+        let buf: ArrayBuffer;
+        if (bytes instanceof Uint8Array) {
+          buf = bytes.buffer.slice(
+            bytes.byteOffset,
+            bytes.byteOffset + bytes.byteLength
+          ) as ArrayBuffer;
+        } else {
+          buf = bytes;
+        }
+        return new Blob([buf], { type: mime });
+      }
+
+      async function encodeWithWasm(q: number, mime: string): Promise<Blob> {
+        const q100 = Math.max(1, Math.min(100, Math.round(q * 100)));
+        if (mime === "image/webp") {
+          const mod = (await import("@jsquash/webp")) as unknown as JsquashModule;
+          const bytes = (await mod.encode(imageData, { quality: q100 })) as ArrayBuffer | Uint8Array;
+          return bytesToBlob(bytes, mime);
+        }
+        if (mime === "image/jpeg") {
+          const mod = (await import("@jsquash/jpeg")) as unknown as JsquashModule;
+          const bytes = (await mod.encode(imageData, { quality: q100 })) as ArrayBuffer | Uint8Array;
+          return bytesToBlob(bytes, mime);
+        }
+        if (mime === "image/avif") {
+          const mod = (await import("@jsquash/avif")) as unknown as JsquashModule;
+          // Many AVIF encoders use cqLevel (0..63). Map roughly from q100.
+          const cqLevel = Math.max(0, Math.min(63, Math.round((100 - q100) * 0.63)));
+          const bytes = (await mod.encode(imageData, { cqLevel })) as ArrayBuffer | Uint8Array;
+          return bytesToBlob(bytes, mime);
+        }
+        if (mime === "image/png") {
+          const mod = (await import("@jsquash/png")) as unknown as JsquashModule;
+          const bytes = (await mod.encode(imageData, {})) as ArrayBuffer | Uint8Array;
+          return bytesToBlob(bytes, mime);
+        }
+        if (mime === "image/qoi") {
+          const mod = (await import("@jsquash/qoi")) as unknown as JsquashModule;
+          const bytes = (await mod.encode(imageData)) as ArrayBuffer | Uint8Array;
+          return bytesToBlob(bytes, mime);
+        }
+        throw new Error("不支持的导出格式");
+      }
+
       async function exportOnce(q: number): Promise<Blob> {
-        const mime = format === "image/avif" && !supportsAVIF ? "image/webp" : format;
-        const blob: Blob | null = await new Promise((resolve) => {
-          if (canvas instanceof OffscreenCanvas) {
-            canvas.convertToBlob({ type: mime, quality: q }).then(resolve);
-          } else {
-            (canvas as HTMLCanvasElement).toBlob(resolve, mime, q);
-          }
-        });
-        if (!blob) throw new Error("导出失败");
-        return blob;
+        return encodeWithWasm(q, format);
       }
 
       let blob: Blob;
@@ -209,7 +277,7 @@ export default function Page() {
         let best: Blob | null = null;
 
         // If starting quality already below cap, do a quick probe upwards
-        let test = await exportOnce(high);
+        const test = await exportOnce(high);
         if (test.size > maxBytes) {
           // binary search down
           for (let i = 0; i < 12; i++) {
@@ -233,8 +301,9 @@ export default function Page() {
       const url = URL.createObjectURL(blob);
       setOutURL(url);
       setSliderPct(50);
-    } catch (e: any) {
-      setError(e?.message || "转换失败");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg || "转换失败");
     } finally {
       setProcessing(false);
     }
@@ -254,6 +323,7 @@ export default function Page() {
 
       {/* Content area */}
       <div className="mx-auto max-w-6xl px-4 pb-16">
+        {/* 移除 SupportCheck 展示组件 */}
         {!file && (
           <DropHint onPick={pickFile} />
         )}
@@ -273,7 +343,7 @@ export default function Page() {
                         min={1}
                         placeholder="自动"
                         value={targetW === "auto" ? "" : targetW}
-                        onChange={(e) => setTargetW(e.target.value ? parseInt(e.target.value) : "auto")}
+                        onChange={(e) => setWidthKeepingAspect(e.target.value ? parseInt(e.target.value) : "auto")}
                         className="w-full rounded-xl border px-3 py-2"
                       />
                       <span className="text-sm text-gray-500">宽</span>
@@ -284,13 +354,31 @@ export default function Page() {
                         min={1}
                         placeholder="自动"
                         value={targetH === "auto" ? "" : targetH}
-                        onChange={(e) => setTargetH(e.target.value ? parseInt(e.target.value) : "auto")}
+                        onChange={(e) => setHeightKeepingAspect(e.target.value ? parseInt(e.target.value) : "auto")}
                         className="w-full rounded-xl border px-3 py-2"
                       />
                       <span className="text-sm text-gray-500">高</span>
                     </div>
                     <label className="col-span-2 flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={keepAspect} onChange={(e) => setKeepAspect(e.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={keepAspect}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setKeepAspect(next);
+                          if (next && imgBitmap) {
+                            // when enabling, sync the other dimension
+                            const aspect = imgBitmap.width / imgBitmap.height;
+                            if (typeof targetW === "number" && (targetH === "auto" || typeof targetH === "number")) {
+                              const newH = Math.max(1, Math.round((targetW as number) / aspect));
+                              setTargetH(newH);
+                            } else if (typeof targetH === "number" && (targetW === "auto" || typeof targetW === "number")) {
+                              const newW = Math.max(1, Math.round((targetH as number) * aspect));
+                              setTargetW(newW);
+                            }
+                          }
+                        }}
+                      />
                       保持长宽比
                     </label>
                     {imgBitmap && (
@@ -303,12 +391,13 @@ export default function Page() {
                     <select
                       className="col-span-2 rounded-xl border px-3 py-2"
                       value={format}
-                      onChange={(e) => setFormat(e.target.value as any)}
+                        onChange={(e) => setFormat(e.target.value as OutputFormat)}
                     >
                       <option value="image/webp">WebP（推荐）</option>
-                      {supportsAVIF && <option value="image/avif">AVIF</option>}
+                      <option value="image/avif">AVIF</option>
                       <option value="image/jpeg">JPEG</option>
                       <option value="image/png">PNG</option>
+                      <option value="image/qoi">QOI</option>
                     </select>
                   </fieldset>
 
@@ -348,12 +437,18 @@ export default function Page() {
                     {srcURL ? "点击开始转换以查看效果" : "请上传图片"}
                   </div>
                 ) : (
-                  <BeforeAfter
-                    original={srcURL!}
-                    converted={outURL}
-                    sliderPct={sliderPct}
-                    onSliderChange={setSliderPct}
-                  />
+                  (format === "image/qoi") ? (
+                    <div className="aspect-video w-full grid place-items-center text-sm text-gray-600 border rounded-xl">
+                      该格式浏览器可能无法预览，请直接下载查看（{downloadName(file, format)}）
+                    </div>
+                  ) : (
+                    <BeforeAfter
+                      original={srcURL!}
+                      converted={outURL}
+                      sliderPct={sliderPct}
+                      onSliderChange={setSliderPct}
+                    />
+                  )
                 )}
 
                 {outBlob && (
@@ -379,7 +474,8 @@ export default function Page() {
 
 function downloadName(file: File | null, mime: string) {
   const base = (file?.name || "image").replace(/\.[^.]+$/, "");
-  const ext = mime.split("/")[1].replace("jpeg", "jpg");
+  let ext = mime.split("/")[1].replace("jpeg", "jpg");
+  if (mime === "image/qoi") ext = "qoi";
   return `${base}.${ext}`;
 }
 
@@ -405,19 +501,21 @@ function BeforeAfter({ original, converted, sliderPct, onSliderChange }: {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  function pctFromEvent(e: React.MouseEvent | MouseEvent | TouchEvent) {
+  const getClientX = useCallback((e: React.MouseEvent | MouseEvent | TouchEvent): number => {
+    if (e instanceof TouchEvent) return e.touches[0].clientX;
+    if (e instanceof MouseEvent) return e.clientX;
+    // React.MouseEvent is structurally similar and has clientX
+    if (typeof (e as React.MouseEvent).clientX === "number") return (e as React.MouseEvent).clientX;
+    return 0;
+  }, []);
+
+  const pctFromEvent = useCallback((e: React.MouseEvent | MouseEvent | TouchEvent) => {
     const el = containerRef.current!;
     const rect = el.getBoundingClientRect();
-    let x: number;
-    if (e instanceof TouchEvent) {
-      x = e.touches[0].clientX;
-    } else {
-      // @ts-ignore
-      x = e.clientX;
-    }
+    const x = getClientX(e);
     const p = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
     return Math.round(p * 100);
-  }
+  }, [getClientX]);
 
   useEffect(() => {
     function onMove(ev: MouseEvent | TouchEvent) {
@@ -435,16 +533,38 @@ function BeforeAfter({ original, converted, sliderPct, onSliderChange }: {
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("touchend", onUp);
     };
-  }, [dragging, onSliderChange]);
+  }, [dragging, onSliderChange, pctFromEvent]);
 
   return (
     <div ref={containerRef} className="relative w-full rounded-xl overflow-hidden border aspect-video select-none">
-      {/* Original as background */}
-      <img src={original} alt="original" className="absolute inset-0 h-full w-full object-contain bg-gray-50" />
+      {/* Converted as background (full) */}
+      <Image
+        src={converted}
+        alt="converted"
+        fill
+        sizes="100vw"
+        className="object-contain bg-gray-50"
+        unoptimized
+        priority={false}
+      />
 
-      {/* Converted clipped to slider */}
-      <div className="absolute inset-0" style={{ width: `${sliderPct}%`, overflow: "hidden" }}>
-        <img src={converted} alt="converted" className="h-full w-full object-contain bg-gray-50" />
+      {/* Original clipped to slider (left side) */}
+      <div
+        className="absolute inset-0"
+        style={{
+          clipPath: `inset(0 ${100 - sliderPct}% 0 0)`,
+          WebkitClipPath: `inset(0 ${100 - sliderPct}% 0 0)`,
+        }}
+      >
+        <Image
+          src={original}
+          alt="original"
+          fill
+          sizes="100vw"
+          className="object-contain bg-gray-50"
+          unoptimized
+          priority={false}
+        />
       </div>
 
       {/* Vertical divider + handle */}
