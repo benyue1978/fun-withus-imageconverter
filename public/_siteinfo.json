@@ -1,0 +1,33 @@
+{
+  "title": {
+    "en": "Image Converter - Multi-format Image Conversion Tool",
+    "zh": "图片转换器 - 多格式图片转换工具"
+  },
+  "description": {
+    "en": "Convert images between different formats with ease. Support for JPG, PNG, WebP, AVIF and more formats. Fast, secure, and user-friendly image conversion tool.",
+    "zh": "轻松在不同格式之间转换图片。支持JPG、PNG、WebP、AVIF等多种格式。快速、安全、用户友好的图片转换工具。"
+  },
+  "icon": "/favicon.svg",
+  "keywords": {
+    "en": ["image converter", "format conversion", "JPG", "PNG", "WebP", "AVIF", "image processing", "online tool"],
+    "zh": ["图片转换器", "格式转换", "JPG", "PNG", "WebP", "AVIF", "图片处理", "在线工具"]
+  },
+  "features": {
+    "en": [
+      "Multi-format support",
+      "Fast conversion",
+      "High quality output",
+      "User-friendly interface",
+      "Secure processing",
+      "No file upload required"
+    ],
+    "zh": [
+      "多格式支持",
+      "快速转换",
+      "高质量输出",
+      "用户友好界面",
+      "安全处理",
+      "无需上传文件"
+    ]
+  }
+}
