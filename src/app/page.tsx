@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import NextImage from "next/image";
 import { encodeImage, type OutputFormat } from "@/lib/codec/encoders";
 import { decodeToImageData } from "@/lib/codec/decoders";
 
@@ -195,24 +195,18 @@ export default function Page() {
       ctx.clearRect(0, 0, w, h);
       ctx.imageSmoothingEnabled = true;
       (ctx as unknown as { imageSmoothingQuality?: string }).imageSmoothingQuality = "high";
-      ctx.drawImage(imgBitmap, 0, 0, w, h);
+      if (file && file.type === "image/svg+xml" && srcURL) {
+        const svgImg = await loadImage(srcURL);
+        ctx.drawImage(svgImg, 0, 0, w, h);
+      } else {
+        ctx.drawImage(imgBitmap, 0, 0, w, h);
+      }
       const imageData: ImageData = ctx.getImageData(0, 0, w, h);
 
       // Export with optional binary search on quality for size cap using WASM encoders
       const maxBytes = Math.max(1, Math.round(maxKB * 1024));
 
-      function bytesToBlob(bytes: Uint8Array | ArrayBuffer, mime: string): Blob {
-        let buf: ArrayBuffer;
-        if (bytes instanceof Uint8Array) {
-          buf = bytes.buffer.slice(
-            bytes.byteOffset,
-            bytes.byteOffset + bytes.byteLength
-          ) as ArrayBuffer;
-        } else {
-          buf = bytes;
-        }
-        return new Blob([buf], { type: mime });
-      }
+      // no-op: bytesToBlob moved to encoders module
 
       async function encodeWithWasm(q: number, mime: OutputFormat): Promise<Blob> {
         return encodeImage(imageData, mime, q);
@@ -430,6 +424,20 @@ export default function Page() {
   );
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    type ImageCtor = new (width?: number, height?: number) => HTMLImageElement;
+    const ctor: ImageCtor | null =
+      typeof window !== "undefined" && typeof (window as Window & { Image: ImageCtor }).Image === "function"
+        ? ((window as Window & { Image: ImageCtor }).Image)
+        : (typeof Image !== "undefined" ? (Image as unknown as ImageCtor) : null);
+    const img: HTMLImageElement = ctor ? new ctor() : (document.createElement("img") as HTMLImageElement);
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+}
+
 function downloadName(file: File | null, mime: string) {
   const base = (file?.name || "image").replace(/\.[^.]+$/, "");
   let ext = mime.split("/")[1].replace("jpeg", "jpg");
@@ -496,7 +504,7 @@ function BeforeAfter({ original, converted, sliderPct, onSliderChange }: {
   return (
     <div ref={containerRef} className="relative w-full rounded-xl overflow-hidden border aspect-video select-none">
       {/* Converted as background (full) */}
-      <Image
+      <NextImage
         src={converted}
         alt="converted"
         fill
@@ -514,7 +522,7 @@ function BeforeAfter({ original, converted, sliderPct, onSliderChange }: {
           WebkitClipPath: `inset(0 ${100 - sliderPct}% 0 0)`,
         }}
       >
-        <Image
+        <NextImage
           src={original}
           alt="original"
           fill

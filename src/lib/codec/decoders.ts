@@ -56,7 +56,9 @@ const svgDecoder: Decoder = {
     const svgText = await file.text();
     const { width, height } = parseSvgSize(svgText);
 
-    const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+    // Inject explicit width/height into data URL to get high-fidelity rasterization at target size
+    const svgWithSize = ensureSvgSize(svgText, width, height);
+    const blob = new Blob([svgWithSize], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     try {
       const img = await loadHtmlImage(url);
@@ -120,6 +122,19 @@ function loadHtmlImage(src: string): Promise<HTMLImageElement> {
     img.onerror = (e) => reject(e);
     img.src = src;
   });
+}
+
+function ensureSvgSize(svg: string, width: number, height: number): string {
+  try {
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const el = doc.documentElement as unknown as SVGSVGElement;
+    el.setAttribute("width", String(width));
+    el.setAttribute("height", String(height));
+    const ser = new XMLSerializer();
+    return ser.serializeToString(el);
+  } catch {
+    return svg;
+  }
 }
 
 // auto-register built-ins (svg first, then raster)
