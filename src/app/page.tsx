@@ -195,8 +195,9 @@ export default function Page() {
 
                 {outBlob && (
                   <div className="mt-4 flex items-center justify-between">
-                    <div className="text-xs text-gray-600">
-                      输出大小：{(outBlob.size / 1024).toFixed(1)} KB
+                    <div className="text-xs text-gray-600 space-x-3">
+                      {file && <span>原图大小：{(file.size / 1024).toFixed(1)} KB</span>}
+                      <span>输出大小：{(outBlob.size / 1024).toFixed(1)} KB</span>
                     </div>
                     <a
                       href={outURL!}
