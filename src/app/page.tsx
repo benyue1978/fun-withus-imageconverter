@@ -2,23 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-
-/**
- * Drop this in app/page.tsx of a Next.js (App Router) project with Tailwind.
- * It resizes & converts an image client‑side and shows an interactive before/after slider.
- */
-type OutputFormat =
-  | "image/png"
-  | "image/jpeg"
-  | "image/webp"
-  | "image/avif"
-  | "image/qoi";
-type JsquashModule = {
-  encode: (
-    img: ImageData,
-    opts?: Record<string, unknown>
-  ) => Promise<Uint8Array | ArrayBuffer>;
-};
+import { encodeImage, type OutputFormat } from "@/lib/codec/encoders";
+import { decodeToImageData } from "@/lib/codec/decoders";
 
 export default function Page() {
   // ====== State ======
@@ -63,9 +48,10 @@ export default function Page() {
       const url = URL.createObjectURL(file);
       setSrcURL(url);
       try {
-        const bitmap = await createImageBitmap(file);
+        // unified decode to ImageData via decoder module, then to ImageBitmap for drawing/preview
+        const decoded = await decodeToImageData(file);
+        const bitmap = await createImageBitmap(decoded);
         setImgBitmap(bitmap);
-        // Default output dimension = original
         setTargetW(bitmap.width);
         setTargetH(bitmap.height);
       } catch (e: unknown) {
@@ -228,36 +214,8 @@ export default function Page() {
         return new Blob([buf], { type: mime });
       }
 
-      async function encodeWithWasm(q: number, mime: string): Promise<Blob> {
-        const q100 = Math.max(1, Math.min(100, Math.round(q * 100)));
-        if (mime === "image/webp") {
-          const mod = (await import("@jsquash/webp")) as unknown as JsquashModule;
-          const bytes = (await mod.encode(imageData, { quality: q100 })) as ArrayBuffer | Uint8Array;
-          return bytesToBlob(bytes, mime);
-        }
-        if (mime === "image/jpeg") {
-          const mod = (await import("@jsquash/jpeg")) as unknown as JsquashModule;
-          const bytes = (await mod.encode(imageData, { quality: q100 })) as ArrayBuffer | Uint8Array;
-          return bytesToBlob(bytes, mime);
-        }
-        if (mime === "image/avif") {
-          const mod = (await import("@jsquash/avif")) as unknown as JsquashModule;
-          // Many AVIF encoders use cqLevel (0..63). Map roughly from q100.
-          const cqLevel = Math.max(0, Math.min(63, Math.round((100 - q100) * 0.63)));
-          const bytes = (await mod.encode(imageData, { cqLevel })) as ArrayBuffer | Uint8Array;
-          return bytesToBlob(bytes, mime);
-        }
-        if (mime === "image/png") {
-          const mod = (await import("@jsquash/png")) as unknown as JsquashModule;
-          const bytes = (await mod.encode(imageData, {})) as ArrayBuffer | Uint8Array;
-          return bytesToBlob(bytes, mime);
-        }
-        if (mime === "image/qoi") {
-          const mod = (await import("@jsquash/qoi")) as unknown as JsquashModule;
-          const bytes = (await mod.encode(imageData)) as ArrayBuffer | Uint8Array;
-          return bytesToBlob(bytes, mime);
-        }
-        throw new Error("不支持的导出格式");
+      async function encodeWithWasm(q: number, mime: OutputFormat): Promise<Blob> {
+        return encodeImage(imageData, mime, q);
       }
 
       async function exportOnce(q: number): Promise<Blob> {
