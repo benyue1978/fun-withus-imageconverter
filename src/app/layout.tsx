@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
 import LocaleProvider from "@/components/LocaleProvider";
 
 const geistSans = Geist({
@@ -76,6 +76,10 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <Script
+          src="https://tally.so/widgets/embed.js"
+          strategy="afterInteractive"
+        />
         <LocaleProvider>
           {children}
         </LocaleProvider>

@@ -38,6 +38,7 @@
   "size": {
     "label": "Target size (px)",
     "inline": "Original size: {iw}×{ih} → Output: {ow}×{oh}"
-  }
+  },
+  "feedback": "Feedback"
 }
 

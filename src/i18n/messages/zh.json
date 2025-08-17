@@ -38,6 +38,7 @@
   "size": {
     "label": "目标尺寸（px）",
     "inline": "原始尺寸：{iw}×{ih} → 输出：{ow}×{oh}"
-  }
+  },
+  "feedback": "反馈"
 }
 

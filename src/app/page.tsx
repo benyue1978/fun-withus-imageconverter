@@ -10,6 +10,7 @@ import { useConverter } from "@/lib/hooks/useConverter";
 import { computeResolvedSize } from "@/lib/utils/size";
 import { useTranslations } from "next-intl";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import FeedbackButton from "@/components/FeedbackButton";
 
 export default function Page() {
   // ====== State ======
@@ -215,6 +216,9 @@ export default function Page() {
           </div>
         )}
       </div>
+
+      {/* Feedback Button */}
+      <FeedbackButton />
     </main>
   );
 }
